@@ -15,6 +15,9 @@ jobs:
       - ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.event.pull_request.draft == false
     steps:
+    env:
+      AUTORESOLVE_LABEL: auto-resolve
+
       - name: Generate PR Review
         uses: augmentcode/review-pr@v0
         with:
@@ -26,8 +29,14 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const number = context.payload.pull_request.number;
+            const pr = context.payload.pull_request;
+            const number = pr.number;
             const { owner, repo } = context.repo;
+            const gated = (pr.labels || []).some(l => l.name === process.env.AUTORESOLVE_LABEL);
+            if (!gated) {
+              core.info(`Skipping autoresolve; PR lacks label ${process.env.AUTORESOLVE_LABEL}`);
+              return;
+            }
             const gql = (q, v) => github.graphql(q, v);
 
             const listThreadsQuery = `
