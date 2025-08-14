@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# OS junk
+.DS_Store
+
+# Coverage and build caches
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+
+# Logs
+*.log
+
