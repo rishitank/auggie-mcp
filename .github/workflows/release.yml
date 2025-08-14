@@ -1,0 +1,32 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (e.g., v0.1.0)'
+        required: true
+      draft:
+        description: 'Create as a draft release'
+        required: false
+        default: 'false'
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release (gh)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          DRAFT: ${{ github.event.inputs.draft || 'false' }}
+        run: |
+          FLAGS=()
+          if [ "${DRAFT}" = "true" ]; then FLAGS+=("--draft"); fi
+          gh release create "${TAG}" --title "${TAG}" --generate-notes "${FLAGS[@]}"
+
