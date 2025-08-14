@@ -2,7 +2,7 @@ name: Pull Request Review
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize]
 
 permissions:
   contents: read
@@ -22,3 +22,65 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           pull_number: ${{ github.event.pull_request.number }}
           repo_name: ${{ github.repository }}
+      - name: Auto-resolve addressed suggestions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const number = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+            const gql = (q, v) => github.graphql(q, v);
+
+            const listThreadsQuery = `
+              query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    headRefOid
+                    reviewThreads(first: 100, after: $after) {
+                      nodes { id isResolved comments(first: 1) { nodes { body path } } }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              }
+            `;
+            const resolveThreadMutation = `
+              mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }
+            `;
+            const getFileAtHead = async (path) => {
+              const headSha = context.payload.pull_request.head.sha;
+              const { data } = await github.request('GET /repos/{owner}/{repo}/contents/{path}', { owner, repo, path, ref: headSha });
+              const buf = Buffer.from(data.content, data.encoding || 'base64');
+              return buf.toString('utf8');
+            };
+            const suggestionRegex = /```suggestion\s*[\r\n]+([\s\S]*?)```/m;
+
+            let threads = [];
+            let after = null;
+            do {
+              const res = await gql(listThreadsQuery, { owner, repo, number, after });
+              const page = res.repository.pullRequest.reviewThreads;
+              threads.push(...page.nodes);
+              after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+            } while (after);
+
+            let resolved = 0;
+            for (const t of threads) {
+              if (t.isResolved) continue;
+              const c = t.comments.nodes[0];
+              if (!c || !c.body) continue;
+              const m = c.body.match(suggestionRegex);
+              if (!m) continue; // only auto-resolve suggestion-type comments
+              const suggestion = m[1].trim();
+              if (!suggestion) continue;
+              try {
+                const file = await getFileAtHead(c.path);
+                if (file.includes(suggestion)) {
+                  await gql(resolveThreadMutation, { threadId: t.id });
+                  resolved++;
+                }
+              } catch (e) {
+                core.warning(`Skip thread due to error: ${e.message}`);
+              }
+            }
+            core.info(`Auto-resolved ${resolved} review thread(s).`);
+
