@@ -10,6 +10,9 @@ An MCP server that wraps the Auggie CLI for agentic code assistance. It exposes 
 - Install Auggie CLI (optional, to enable Auggie tools):
   - `npm install -g @augmentcode/auggie`
 
+- Contributing: see CONTRIBUTING.md
+- Changelog: see CHANGELOG.md
+
 ## Scripts
 
 - Dev: `npm run dev`
