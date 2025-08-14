@@ -4,6 +4,8 @@ An MCP server that wraps the Auggie CLI for agentic code assistance. It exposes 
 
 [![ESLint](https://img.shields.io/badge/code%20style-ESLint%20%2B%20Prettier-blue)](https://eslint.org/)
 
+[![CI](https://github.com/rishitank/auggie-mcp/workflows/CI/badge.svg)](https://github.com/rishitank/auggie-mcp/actions/workflows/ci.yml)
+
 ## Installation
 
 - Requires Node >= 24.5.0
