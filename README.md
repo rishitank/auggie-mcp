@@ -2,6 +2,8 @@
 
 An MCP server that wraps the Auggie CLI for agentic code assistance. It exposes safe, agent-friendly tools for discovery, code search, git insight, and guarded Auggie orchestration.
 
+[![ESLint](https://img.shields.io/badge/code%20style-ESLint%20%2B%20Prettier-blue)](https://eslint.org/)
+
 ## Installation
 
 - Requires Node >= 24.5.0
@@ -64,6 +66,7 @@ An MCP server that wraps the Auggie CLI for agentic code assistance. It exposes 
 ## Safety
 
 - Auggie execution is disabled by default. Opt-in via `AUGGIE_MCP_ALLOW_EXEC=true`.
+
 ## HTTP Streaming (optional)
 
 - Enable with env: `export AUGGIE_MCP_HTTP_PORT=5050`
@@ -74,6 +77,19 @@ An MCP server that wraps the Auggie CLI for agentic code assistance. It exposes 
 
 Example:
 
+## Code Style
+
+- Modern JavaScript/TypeScript with ES modules
+- Arrow functions only (no `function` keyword)
+- ESLint enforces style; Prettier verifies formatting
+- Pre-commit runs lint-staged to auto-fix staged changes
+
+Scripts:
+
+- Lint: `npm run lint`
+- Check format: `npm run format`
+- Format write: `npm run format:fix`
+
 ```bash
 AUGGIE_MCP_ALLOW_EXEC=true AUGGIE_MCP_HTTP_PORT=5050 npm start &
 AUGGIE_MCP_HTTP_PORT=5050 npm run stream:client
@@ -81,4 +97,3 @@ AUGGIE_MCP_HTTP_PORT=5050 npm run stream:client
 
 - File access is sandboxed to repo root.
 - Long calls are time-bounded.
-

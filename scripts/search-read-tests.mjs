@@ -16,7 +16,7 @@ const cwd = resolve(__dirname, '..');
 
   // searchInText should find README.md headings
   const hits = await project.searchInText('Auggie MCP', undefined, 5);
-  assert(hits.some(h => h.path.toLowerCase() === 'readme.md'));
+  assert(hits.some((h) => h.path.toLowerCase() === 'readme.md'));
 
   // safeReadFile ranges
   const text = await project.safeReadFile('README.md', 1, 2);
@@ -34,4 +34,3 @@ const cwd = resolve(__dirname, '..');
 
   console.log('Search/read tests passed.');
 })();
-
