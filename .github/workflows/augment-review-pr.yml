@@ -36,7 +36,7 @@ jobs:
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
                     reviewThreads(first: 100, after: $after) {
-                      nodes { id isResolved path line startLine comments(first: 1) { nodes { body } } }
+                      nodes { id isResolved path line startLine comments(first: 50) { nodes { body } } }
                       pageInfo { hasNextPage endCursor }
                     }
                   }
@@ -58,7 +58,7 @@ jobs:
               const e = Math.min(lines.length, end || lines.length);
               return lines.slice(s - 1, e).join('\n');
             };
-            const suggestionRegex = /```suggestion\s*[\r\n]+([\s\S]*?)```/m;
+            const suggestionRegex = /```suggestion[^\r\n]*[\r\n]+([\s\S]*?)```/m;
 
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.trim().length === 0) return false;
@@ -86,11 +86,11 @@ jobs:
             let resolved = 0;
             for (const t of threads) {
               if (t.isResolved) continue;
-              const c = t.comments.nodes[0];
-              if (!c || !c.body) continue;
-              const m = c.body.match(suggestionRegex);
-              if (!m) continue; // only auto-resolve suggestion-type comments
-              const suggestion = m[1].trim();
+              const comments = (t.comments && t.comments.nodes) || [];
+              const found = comments.find(cm => cm && typeof cm.body === 'string' && suggestionRegex.test(cm.body));
+              if (!found) continue; // only auto-resolve suggestion-type comments
+              const match = found.body.match(suggestionRegex);
+              const suggestion = (match && match[1] ? match[1].trim() : '');
               if (!suggestion) continue;
               try {
                 const filePath = t.path;
@@ -98,7 +98,8 @@ jobs:
                   core.warning(`Skip thread ${t.id}: invalid or missing path ${filePath}`);
                   continue;
                 }
-                const file = await getFileAtHead(filePath);
+                const fileRaw = await getFileAtHead(filePath);
+                const file = fileRaw.replace(/\r\n/g, '\n');
                 // Prefer a small window around the thread line(s) to reduce false positives
                 const startLine = t.startLine || t.line || 1;
                 const endLine = t.line || t.startLine || startLine;
