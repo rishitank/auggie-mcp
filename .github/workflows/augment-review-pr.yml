@@ -61,10 +61,10 @@ jobs:
             const suggestionRegex = /```suggestion\s*[\r\n]+([\s\S]*?)```/m;
 
             const matchesSuggestion = (file, suggestion) => {
-              if (!suggestion || suggestion.length <= 10) return false;
+              if (!suggestion || suggestion.trim().length === 0) return false;
               const norm = suggestion.replace(/\r\n/g, '\n');
               const lines = norm.split('\n').filter(l => l.trim() !== '');
-              if (lines.length < 2) return false; // require multi-line to avoid trivial matches
+              if (lines.length < 1) return false; // require at least one non-empty line
               const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const escaped = lines.map(escape);
               const pattern = escaped.map((l, i) => (i === 0 ? l : '\\s*' + l)).join('\\r?\\n');
@@ -94,15 +94,15 @@ jobs:
               if (!suggestion) continue;
               try {
                 const filePath = t.path;
-                if (!filePath || filePath.includes('..')) {
+                if (!filePath || filePath.includes('..') || filePath.startsWith('/') || filePath.includes('\0')) {
                   core.warning(`Skip thread ${t.id}: invalid or missing path ${filePath}`);
                   continue;
                 }
                 const file = await getFileAtHead(filePath);
                 // Prefer a small window around the thread line(s) to reduce false positives
-                const startLine = t.startLine || t.line;
+                const startLine = t.startLine || t.line || 1;
                 const endLine = t.line || t.startLine || startLine;
-                const window = startLine ? getWindowByLines(file, Math.max(1, startLine - 5), (endLine || startLine) + 5) : null;
+                const window = getWindowByLines(file, Math.max(1, startLine - 5), endLine + 5);
                 const matches = window ? matchesSuggestion(window, suggestion) : matchesSuggestion(file, suggestion);
                 if (matches) {
                   await gql(resolveThreadMutation, { threadId: t.id });
