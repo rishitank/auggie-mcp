@@ -58,7 +58,7 @@ jobs:
               const e = Math.min(lines.length, end || lines.length);
               return lines.slice(s - 1, e).join('\n');
             };
-            const suggestionRegex = /```suggestion[^\r\n]*[\r\n]+([\s\S]*?)```/m;
+            const suggestionRegex = /```suggestion[^\r\n]*[\r\n]+([\s\S]*?)```/gm;
 
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.trim().length === 0) return false;
@@ -87,11 +87,8 @@ jobs:
             for (const t of threads) {
               if (t.isResolved) continue;
               const comments = (t.comments && t.comments.nodes) || [];
-              const found = comments.find(cm => cm && typeof cm.body === 'string' && suggestionRegex.test(cm.body));
-              if (!found) continue; // only auto-resolve suggestion-type comments
-              const match = found.body.match(suggestionRegex);
-              const suggestion = (match && match[1] ? match[1].trim() : '');
-              if (!suggestion) continue;
+              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && suggestionRegex.test(cm.body));
+              if (!suggestionComments.length) continue; // only auto-resolve suggestion-type comments
               try {
                 const filePath = t.path;
                 if (!filePath || filePath.includes('..') || filePath.startsWith('/') || filePath.includes('\0')) {
@@ -105,14 +102,26 @@ jobs:
                 const endLine = t.line || t.startLine || startLine;
                 const fileLinesCount = file.split('\n').length;
                 const window = getWindowByLines(file, Math.max(1, startLine - 5), Math.min(fileLinesCount, endLine + 5));
-                let matches = false;
-                if (window) {
-                  matches = matchesSuggestion(window, suggestion);
+
+                let threadMatches = false;
+                for (const comment of suggestionComments) {
+                  const all = [...comment.body.matchAll(suggestionRegex)];
+                  for (const m of all) {
+                    const suggestion = (m && m[1] ? m[1].trim() : '');
+                    if (!suggestion) continue;
+                    let matches = false;
+                    if (window) {
+                      matches = matchesSuggestion(window, suggestion);
+                    }
+                    if (!matches && file.length < 50000) {
+                      matches = matchesSuggestion(file, suggestion);
+                    }
+                    if (matches) { threadMatches = true; break; }
+                  }
+                  if (threadMatches) break;
                 }
-                if (!matches && file.length < 50000) {
-                  matches = matchesSuggestion(file, suggestion);
-                }
-                if (matches) {
+
+                if (threadMatches) {
                   await gql(resolveThreadMutation, { threadId: t.id });
                   resolved++;
                 }
