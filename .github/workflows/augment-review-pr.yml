@@ -35,9 +35,8 @@ jobs:
               query($owner: String!, $repo: String!, $number: Int!, $after: String) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
-                    headRefOid
                     reviewThreads(first: 100, after: $after) {
-                      nodes { id isResolved comments(first: 1) { nodes { body path } } }
+                      nodes { id isResolved path line startLine comments(first: 1) { nodes { body } } }
                       pageInfo { hasNextPage endCursor }
                     }
                   }
@@ -52,6 +51,12 @@ jobs:
               const { data } = await github.request('GET /repos/{owner}/{repo}/contents/{path}', { owner, repo, path, ref: headSha });
               const buf = Buffer.from(data.content, data.encoding || 'base64');
               return buf.toString('utf8');
+            };
+            const getWindowByLines = (text, start, end) => {
+              const lines = text.split('\n');
+              const s = Math.max(1, start || 1);
+              const e = Math.min(lines.length, end || lines.length);
+              return lines.slice(s - 1, e).join('\n');
             };
             const suggestionRegex = /```suggestion\s*[\r\n]+([\s\S]*?)```/m;
 
@@ -88,13 +93,20 @@ jobs:
               const suggestion = m[1].trim();
               if (!suggestion) continue;
               try {
-                const file = await getFileAtHead(c.path);
-                if (matchesSuggestion(file, suggestion)) {
+                const filePath = t.path || c.path;
+                const file = await getFileAtHead(filePath);
+                // Prefer a small window around the thread line(s) to reduce false positives
+                const startLine = t.startLine || t.line;
+                const endLine = t.line || t.startLine || startLine;
+                const window = startLine ? getWindowByLines(file, Math.max(1, startLine - 5), (endLine || startLine) + 5) : null;
+                const matches = window ? matchesSuggestion(window, suggestion) : matchesSuggestion(file, suggestion);
+                if (matches) {
                   await gql(resolveThreadMutation, { threadId: t.id });
                   resolved++;
                 }
               } catch (e) {
-                core.warning(`Skip thread ${t.id} for path ${c.path}: ${e.message}`);
+                const fp = (t && (t.path || (c && c.path))) || '?';
+                core.warning(`Skip thread ${t.id} for path ${fp}: ${e.message}`);
               }
             }
             core.info(`Auto-resolved ${resolved} review thread(s).`);
