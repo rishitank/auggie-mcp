@@ -14,10 +14,9 @@ jobs:
     runs-on:
       - ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.event.pull_request.draft == false
-    steps:
     env:
       AUTORESOLVE_LABEL: auto-resolve
-
+    steps:
       - name: Generate PR Review
         uses: augmentcode/review-pr@v0
         with:
@@ -83,12 +82,12 @@ jobs:
               if (!suggestion) continue;
               try {
                 const file = await getFileAtHead(c.path);
-                if (file.includes(suggestion)) {
+                if (suggestion.length > 10 && file.includes(suggestion)) {
                   await gql(resolveThreadMutation, { threadId: t.id });
                   resolved++;
                 }
               } catch (e) {
-                core.warning(`Skip thread due to error: ${e.message}`);
+                core.warning(`Skip thread ${t.id} for path ${c.path}: ${e.message}`);
               }
             }
             core.info(`Auto-resolved ${resolved} review thread(s).`);
