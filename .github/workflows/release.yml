@@ -28,5 +28,5 @@ jobs:
         run: |
           FLAGS=()
           if [ "${DRAFT}" = "true" ]; then FLAGS+=("--draft"); fi
-          gh release create "${TAG}" --title "${TAG}" --generate-notes ${FLAGS[*]}
+          gh release create "${TAG}" --title "${TAG}" --generate-notes "${FLAGS[@]}"
 

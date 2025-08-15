@@ -60,12 +60,6 @@ jobs:
             };
             const suggestionRegex = /```suggestion\s*[\r\n]+([\s\S]*?)```/m;
 
-            let threads = [];
-            let after = null;
-            do {
-              const res = await gql(listThreadsQuery, { owner, repo, number, after });
-              const page = res.repository.pullRequest.reviewThreads;
-              threads.push(...page.nodes);
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.length <= 10) return false;
               const norm = suggestion.replace(/\r\n/g, '\n');
@@ -80,6 +74,12 @@ jobs:
               return file.includes(norm);
             };
 
+            let threads = [];
+            let after = null;
+            do {
+              const res = await gql(listThreadsQuery, { owner, repo, number, after });
+              const page = res.repository.pullRequest.reviewThreads;
+              threads.push(...page.nodes);
               after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
             } while (after);
 
@@ -93,7 +93,11 @@ jobs:
               const suggestion = m[1].trim();
               if (!suggestion) continue;
               try {
-                const filePath = t.path || c.path;
+                const filePath = t.path;
+                if (!filePath || filePath.includes('..')) {
+                  core.warning(`Skip thread ${t.id}: invalid or missing path ${filePath}`);
+                  continue;
+                }
                 const file = await getFileAtHead(filePath);
                 // Prefer a small window around the thread line(s) to reduce false positives
                 const startLine = t.startLine || t.line;
@@ -105,8 +109,12 @@ jobs:
                   resolved++;
                 }
               } catch (e) {
-                const fp = (t && (t.path || (c && c.path))) || '?';
-                core.warning(`Skip thread ${t.id} for path ${fp}: ${e.message}`);
+                if (e?.status === 404) {
+                  core.warning(`Skip thread ${t.id}: file not found at path ${t.path}`);
+                } else {
+                  core.error(`Failed to process thread ${t.id} for path ${t.path}: ${e?.message}`);
+                  throw e;
+                }
               }
             }
             core.info(`Auto-resolved ${resolved} review thread(s).`);
