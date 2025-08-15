@@ -61,6 +61,20 @@ jobs:
               const res = await gql(listThreadsQuery, { owner, repo, number, after });
               const page = res.repository.pullRequest.reviewThreads;
               threads.push(...page.nodes);
+            const matchesSuggestion = (file, suggestion) => {
+              if (!suggestion || suggestion.length <= 10) return false;
+              const norm = suggestion.replace(/\r\n/g, '\n');
+              const lines = norm.split('\n').filter(l => l.trim() !== '');
+              if (lines.length < 2) return false; // require multi-line to avoid trivial matches
+              const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const escaped = lines.map(escape);
+              const pattern = escaped.map((l, i) => (i === 0 ? l : '\\s*' + l)).join('\\r?\\n');
+              const re = new RegExp(pattern, 'm');
+              if (re.test(file)) return true;
+              // Fallback exact check
+              return file.includes(norm);
+            };
+
               after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
             } while (after);
 
@@ -75,7 +89,7 @@ jobs:
               if (!suggestion) continue;
               try {
                 const file = await getFileAtHead(c.path);
-                if (suggestion.length > 10 && suggestion.split('\n').length > 1 && file.includes(suggestion)) {
+                if (matchesSuggestion(file, suggestion)) {
                   await gql(resolveThreadMutation, { threadId: t.id });
                   resolved++;
                 }
