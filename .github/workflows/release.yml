@@ -28,6 +28,6 @@ jobs:
         run: |
           FLAGS=()
           if [ "${DRAFT}" = "true" ]; then FLAGS+=("--draft"); fi
-          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then echo "Invalid tag format: ${TAG}. Expected format: v1.2.3"; exit 1; fi
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then echo "Invalid tag format: ${TAG}. Expected format: v1.2.3 or v1.2.3-alpha.1"; exit 1; fi
           gh release view "${TAG}" >/dev/null 2>&1 && { echo "Release ${TAG} already exists. Skipping creation."; exit 0; }
           gh release create "${TAG}" --title "${TAG}" --generate-notes "${FLAGS[@]}" || { echo "Failed to create release ${TAG}. Check if tag exists or permissions are missing."; exit 1; }

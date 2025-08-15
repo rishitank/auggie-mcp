@@ -67,7 +67,7 @@ jobs:
               if (lines.every(l => l.trim() === '')) return false; // require at least one non-empty line overall
               const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const escaped = lines.map(escape);
-              const pattern = escaped.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n');
+              const pattern = escaped.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
               const re = new RegExp(pattern, 'm');
               if (re.test(file)) return true;
               // Fallback exact check
@@ -105,8 +105,13 @@ jobs:
                 const endLine = t.line || t.startLine || startLine;
                 const fileLinesCount = file.split('\n').length;
                 const window = getWindowByLines(file, Math.max(1, startLine - 5), Math.min(fileLinesCount, endLine + 5));
-                const matches = window ? matchesSuggestion(window, suggestion)
-                                       : (file.length < 50000 ? matchesSuggestion(file, suggestion) : false);
+                let matches = false;
+                if (window) {
+                  matches = matchesSuggestion(window, suggestion);
+                }
+                if (!matches && file.length < 50000) {
+                  matches = matchesSuggestion(file, suggestion);
+                }
                 if (matches) {
                   await gql(resolveThreadMutation, { threadId: t.id });
                   resolved++;
