@@ -2,7 +2,7 @@ name: Pull Request Review
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize]
 
 permissions:
   contents: read
@@ -22,3 +22,121 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           pull_number: ${{ github.event.pull_request.number }}
           repo_name: ${{ github.repository }}
+      - name: Auto-resolve addressed suggestions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const number = pr.number;
+            const { owner, repo } = context.repo;
+            const gql = (q, v) => github.graphql(q, v);
+
+            const listThreadsQuery = `
+              query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100, after: $after) {
+                      nodes { id isResolved path line startLine comments(first: 50) { nodes { body } } }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              }
+            `;
+            const resolveThreadMutation = `
+              mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }
+            `;
+            const getFileAtHead = async (path) => {
+              const headSha = context.payload.pull_request.head.sha;
+              const { data } = await github.request('GET /repos/{owner}/{repo}/contents/{path}', { owner, repo, path, ref: headSha });
+              const buf = Buffer.from(data.content, data.encoding || 'base64');
+              return buf.toString('utf8');
+            };
+            const getWindowByLines = (text, start, end) => {
+              const lines = text.split('\n');
+              const s = Math.max(1, start || 1);
+              const e = Math.min(lines.length, end || lines.length);
+              return lines.slice(s - 1, e).join('\n');
+            };
+            // Matches ```suggestion [lang]\n...``` blocks (single or multiple)
+            const suggestionPattern = '```suggestion[^\\r\\n]*[\\r\\n]+([\\s\\S]*?)```';
+
+            const matchesSuggestion = (file, suggestion) => {
+              if (!suggestion || suggestion.trim().length === 0) return false;
+              const norm = suggestion.replace(/\r\n/g, '\n');
+              const lines = norm.split('\n').map(l => l.replace(/\s+$/, ''));
+              if (lines.every(l => l.trim() === '')) return false; // require at least one non-empty line overall
+              const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const escaped = lines.map(escape);
+              const buildPatternFromLines = (ls) => ls.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
+              const pattern = buildPatternFromLines(escaped);
+              const re = new RegExp(pattern, 'm');
+              if (re.test(file)) return true;
+              // Fallback exact check
+              return file.includes(norm);
+            };
+
+            let threads = [];
+            let after = null;
+            do {
+              const res = await gql(listThreadsQuery, { owner, repo, number, after });
+              const page = res.repository.pullRequest.reviewThreads;
+              threads.push(...page.nodes);
+              after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+            } while (after);
+
+            let resolved = 0;
+            for (const t of threads) {
+              if (t.isResolved) continue;
+              const comments = (t.comments && t.comments.nodes) || [];
+              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && new RegExp(suggestionPattern, 'm').test(cm.body));
+              if (!suggestionComments.length) continue; // only auto-resolve suggestion-type comments
+              try {
+                const filePath = t.path;
+                const decodedPath = (() => { try { return decodeURIComponent(filePath); } catch { return filePath; } })();
+                if (!filePath || filePath.includes('..') || filePath.startsWith('/') || filePath.includes('\0') || decodedPath.includes('..')) {
+                  core.warning(`Skip thread ${t.id}: invalid or missing path ${filePath}`);
+                  continue;
+                }
+                const fileRaw = await getFileAtHead(filePath);
+                const file = fileRaw.replace(/\r\n/g, '\n');
+                // Prefer a small window around the thread line(s) to reduce false positives
+                const startLine = t.startLine || t.line || 1;
+                const endLine = t.line || t.startLine || startLine;
+                const fileLinesCount = file.split('\n').length;
+                const window = getWindowByLines(file, Math.max(1, startLine - 5), Math.min(fileLinesCount, endLine + 5));
+
+                let threadMatches = false;
+                for (const comment of suggestionComments) {
+                  const all = [...comment.body.matchAll(new RegExp(suggestionPattern, 'gm'))];
+                  for (const m of all) {
+                    const suggestion = (m && m[1] ? m[1].trim() : '');
+                    if (!suggestion) continue;
+                    let matches = false;
+                    if (window) {
+                      matches = matchesSuggestion(window, suggestion);
+                    }
+                    const MAX_FILE_SIZE_FOR_FULL_SCAN = 100000; // 100KB limit to avoid performance issues
+                    if (!matches && file.length < MAX_FILE_SIZE_FOR_FULL_SCAN) {
+                      matches = matchesSuggestion(file, suggestion);
+                    }
+                    if (matches) { threadMatches = true; break; }
+                  }
+                  if (threadMatches) break;
+                }
+
+                if (threadMatches) {
+                  await gql(resolveThreadMutation, { threadId: t.id });
+                  resolved++;
+                }
+              } catch (e) {
+                if (e?.status === 404) {
+                  core.warning(`Skip thread ${t.id}: file not found at path ${t.path}`);
+                } else {
+                  core.error(`Failed to process thread ${t.id} for path ${t.path}: ${e?.message}`);
+                  continue; // log and skip this thread
+                }
+              }
+            }
+            core.info(`Auto-resolved ${resolved} review thread(s).`);
+
