@@ -58,8 +58,8 @@ jobs:
               const e = Math.min(lines.length, end || lines.length);
               return lines.slice(s - 1, e).join('\n');
             };
+            // Matches ```suggestion [lang]\n...``` blocks (single or multiple)
             const suggestionPattern = '```suggestion[^\\r\\n]*[\\r\\n]+([\\s\\S]*?)```';
-            const suggestionReSingle = new RegExp(suggestionPattern, 'm');
 
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.trim().length === 0) return false;
@@ -68,7 +68,8 @@ jobs:
               if (lines.every(l => l.trim() === '')) return false; // require at least one non-empty line overall
               const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const escaped = lines.map(escape);
-              const pattern = escaped.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
+              const buildPatternFromLines = (ls) => ls.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
+              const pattern = buildPatternFromLines(escaped);
               const re = new RegExp(pattern, 'm');
               if (re.test(file)) return true;
               // Fallback exact check
@@ -115,7 +116,8 @@ jobs:
                     if (window) {
                       matches = matchesSuggestion(window, suggestion);
                     }
-                    if (!matches && file.length < 100000) {
+                    const MAX_FILE_SIZE_FOR_FULL_SCAN = 100000; // 100KB limit to avoid performance issues
+                    if (!matches && file.length < MAX_FILE_SIZE_FOR_FULL_SCAN) {
                       matches = matchesSuggestion(file, suggestion);
                     }
                     if (matches) { threadMatches = true; break; }
