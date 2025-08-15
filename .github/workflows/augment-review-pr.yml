@@ -58,7 +58,8 @@ jobs:
               const e = Math.min(lines.length, end || lines.length);
               return lines.slice(s - 1, e).join('\n');
             };
-            const suggestionRegex = /```suggestion[^\r\n]*[\r\n]+([\s\S]*?)```/gm;
+            const suggestionPattern = '```suggestion[^\\r\\n]*[\\r\\n]+([\\s\\S]*?)```';
+            const suggestionReSingle = new RegExp(suggestionPattern, 'm');
 
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.trim().length === 0) return false;
@@ -87,7 +88,7 @@ jobs:
             for (const t of threads) {
               if (t.isResolved) continue;
               const comments = (t.comments && t.comments.nodes) || [];
-              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && suggestionRegex.test(cm.body));
+              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && new RegExp(suggestionPattern, 'm').test(cm.body));
               if (!suggestionComments.length) continue; // only auto-resolve suggestion-type comments
               try {
                 const filePath = t.path;
@@ -106,7 +107,7 @@ jobs:
 
                 let threadMatches = false;
                 for (const comment of suggestionComments) {
-                  const all = [...comment.body.matchAll(suggestionRegex)];
+                  const all = [...comment.body.matchAll(new RegExp(suggestionPattern, 'gm'))];
                   for (const m of all) {
                     const suggestion = (m && m[1] ? m[1].trim() : '');
                     if (!suggestion) continue;
