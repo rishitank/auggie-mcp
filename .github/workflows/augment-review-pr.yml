@@ -59,7 +59,7 @@ jobs:
               return lines.slice(s - 1, e).join('\n');
             };
             // Matches ```suggestion [lang]\n...``` blocks (single or multiple)
-            const suggestionPattern = '```suggestion[^\\r\\n]*[\\r\\n]+([\\s\\S]*?)```';
+            const SUGGESTION_RE = /```suggestion[^\\r\\n]*[\\r\\n]+([\\s\\S]*?)```/;
 
             const matchesSuggestion = (file, suggestion) => {
               if (!suggestion || suggestion.trim().length === 0) return false;
@@ -68,8 +68,13 @@ jobs:
               if (lines.every(l => l.trim() === '')) return false; // require at least one non-empty line overall
               const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const escaped = lines.map(escape);
-              const buildPatternFromLines = (ls) => ls.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
+              const buildPatternFromLines = (ls) => {
+                // Guard against excessively long patterns that could impact performance
+                if (ls.some(l => l.length > 1000)) return null;
+                return ls.map(l => (l.length > 0 ? '^\\s*' + l + '\\s*$' : '^\\s*$')).join('\\s*\\r?\\n\\s*');
+              };
               const pattern = buildPatternFromLines(escaped);
+              if (!pattern) return false;
               const re = new RegExp(pattern, 'm');
               if (re.test(file)) return true;
               // Fallback exact check
@@ -89,7 +94,7 @@ jobs:
             for (const t of threads) {
               if (t.isResolved) continue;
               const comments = (t.comments && t.comments.nodes) || [];
-              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && new RegExp(suggestionPattern, 'm').test(cm.body));
+              const suggestionComments = comments.filter(cm => cm && typeof cm.body === 'string' && new RegExp(SUGGESTION_RE.source, 'm').test(cm.body));
               if (!suggestionComments.length) continue; // only auto-resolve suggestion-type comments
               try {
                 const filePath = t.path;
@@ -108,7 +113,7 @@ jobs:
 
                 let threadMatches = false;
                 for (const comment of suggestionComments) {
-                  const all = [...comment.body.matchAll(new RegExp(suggestionPattern, 'gm'))];
+                  const all = [...comment.body.matchAll(new RegExp(SUGGESTION_RE.source, 'gm'))];
                   for (const m of all) {
                     const suggestion = (m && m[1] ? m[1].trim() : '');
                     if (!suggestion) continue;
