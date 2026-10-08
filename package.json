@@ -1,9 +1,4 @@
 {
-  "lint-staged": {
-    "*.{ts,js,mjs}": [
-      "eslint --fix"
-    ]
-  },
   "name": "auggie-mcp",
   "version": "0.1.0",
   "private": true,
@@ -16,11 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "eslint src scripts --ext .ts,.js,.mjs",
-    "format": "prettier -c .",
+    "format": "prettier --check .",
     "format:fix": "prettier -w .",
     "prepare": "husky",
-    "format": "prettier --write .",
-    "prepare": "husky install",
     "smoke": "node scripts/smoke.mjs",
     "test": "node scripts/test.mjs && node scripts/stream-test.mjs && node scripts/stream-test-negative-exec.mjs && node scripts/search-read-tests.mjs",
     "stream:client": "node scripts/stream-client.mjs"
@@ -46,6 +39,6 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.3"
+    "@modelcontextprotocol/sdk": "^1.32.1"
   }
 }
