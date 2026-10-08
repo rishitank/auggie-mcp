@@ -13,12 +13,22 @@ jobs:
     name: Pull Request Review
     runs-on:
       - ubuntu-latest
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.event.pull_request.draft == false
+    # Skip bot PRs (Renovate's update stream would spend Augment credits and
+    # fail when the session expires) as well as forks and drafts.
+    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.event.pull_request.draft == false && github.actor != 'renovate[bot]' && github.event.pull_request.user.type != 'Bot'
+    env:
+      # Secrets cannot be read in `if:`, so expose only whether one is set.
+      HAS_AUGMENT_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH != '' }}
     steps:
       - name: Generate PR Review
+        if: env.HAS_AUGMENT_AUTH == 'true'
         uses: augmentcode/review-pr@v0
         with:
           augment_session_auth: ${{ secrets.AUGMENT_SESSION_AUTH }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           pull_number: ${{ github.event.pull_request.number }}
           repo_name: ${{ github.repository }}
+
+      - name: Note skipped review
+        if: env.HAS_AUGMENT_AUTH != 'true'
+        run: echo "::notice title=Augment review skipped::AUGMENT_SESSION_AUTH is not set for this repository."

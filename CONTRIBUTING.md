@@ -35,4 +35,3 @@ Pre-commit runs lint-staged to auto-fix staged changes.
 - Never execute external tools unless `AUGGIE_MCP_ALLOW_EXEC=true`
 - Validate inputs on network endpoints (e.g., `/stream`)
 - Clear intervals/timeouts; avoid leaks
-
